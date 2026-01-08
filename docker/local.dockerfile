@@ -54,20 +54,40 @@ EOF
 ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken
 
 # Install dify_plugin to speedup the environment setup, test uv and preload tiktoken
-# RUN <<EOF bash
-# 
-# set -ex
-# set -o pipefail
-# trap 'echo "Exit status $? at line $LINENO from: $BASH_COMMAND"' ERR
-# 
-# mv /usr/lib/python3.12/EXTERNALLY-MANAGED /usr/lib/python3.12/EXTERNALLY-MANAGED.bk
-# python3 -m pip install uv
-# uv pip install --system dify_plugin
-# 
-# python3 -c "from uv._find_uv import find_uv_bin;print(find_uv_bin());"
-# 
-# python3 -c "import tiktoken; encodings = ['o200k_base', 'cl100k_base', 'p50k_base', 'r50k_base', 'p50k_edit', 'gpt2']; [tiktoken.get_encoding(encoding).special_tokens_set for encoding in encodings]"
-# EOF
+RUN <<EOF bash
+
+set -ex
+set -o pipefail
+trap 'echo "Exit status $? at line $LINENO from: $BASH_COMMAND"' ERR
+
+# Remove EXTERNALLY-MANAGED to allow pip install
+mv /usr/lib/python3.12/EXTERNALLY-MANAGED /usr/lib/python3.12/EXTERNALLY-MANAGED.bk
+
+# Install uv with retry logic (1-3 times) to handle network issues
+for i in 1 2 3; do
+    echo "Attempting to install uv (attempt $i/3)..."
+    if python3 -m pip install uv; then
+        echo "Successfully installed uv on attempt $i"
+        break
+    else
+        if [ $i -eq 3 ]; then
+            echo "Failed to install uv after 3 attempts"
+            exit 1
+        fi
+        echo "Retry in 5 seconds..."
+        sleep 5
+    fi
+done
+
+# Install dify_plugin with uv
+uv pip install --system dify_plugin
+
+# Verify uv installation
+python3 -c "from uv._find_uv import find_uv_bin;print(find_uv_bin());"
+
+# Preload tiktoken encodings
+python3 -c "import tiktoken; encodings = ['o200k_base', 'cl100k_base', 'p50k_base', 'r50k_base', 'p50k_edit', 'gpt2']; [tiktoken.get_encoding(encoding).special_tokens_set for encoding in encodings]"
+EOF
 
 ENV UV_PATH=/usr/local/bin/uv
 ENV PLATFORM=$PLATFORM
