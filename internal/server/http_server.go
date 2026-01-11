@@ -19,6 +19,7 @@ import (
 // server starts a http server and returns a function to stop it
 func (app *App) server(config *app.Config) func() {
 	engine := gin.New()
+	engine.Use(CORSMiddleware())
 	engine.Use(log.RecoveryMiddleware())
 	engine.Use(log.TraceMiddleware())
 	if config.HealthApiLogEnabled {
